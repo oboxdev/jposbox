@@ -25,10 +25,13 @@ public class AppConfig {
     private static final Logger LOG = Logger.getLogger(AppConfig.class.getName());
     private static final Gson GSON = new Gson();
 
+    public static final String DEFAULT_UPDATE_CHECK_URL =
+            "https://raw.githubusercontent.com/oboxdev/jposbox/main/update.json";
+
     public int httpPort = 8008;
     public int httpsPort = 8443;
     public boolean httpsEnabled = true;
-    public String updateCheckUrl = "";
+    public String updateCheckUrl = DEFAULT_UPDATE_CHECK_URL;
     public List<PrinterConfig> printers = new ArrayList<>();
 
     public static Path homeDir() {
@@ -112,7 +115,11 @@ public class AppConfig {
                     case "httpPort" -> cfg.httpPort = Integer.parseInt(value);
                     case "httpsPort" -> cfg.httpsPort = Integer.parseInt(value);
                     case "httpsEnabled" -> cfg.httpsEnabled = Boolean.parseBoolean(value);
-                    case "updateCheckUrl" -> cfg.updateCheckUrl = value;
+                    case "updateCheckUrl" -> {
+                        if (value != null && !value.isBlank()) {
+                            cfg.updateCheckUrl = value;
+                        }
+                    }
                     default -> { /* ignore unknown keys */ }
                 }
             }
