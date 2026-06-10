@@ -58,6 +58,27 @@ After each release, bump `version` in `update.json` (and `build.gradle.kts`,
 and add a `CHANGELOG.md` entry) and push to `main` — clients will then see the
 new version on their next check.
 
+### macOS code signing & notarization (optional)
+
+Without signing, macOS users see "No se abrió" / "Apple no pudo verificar" and
+must right-click > Open (or `xattr -cr jPosBox.app`) on first launch.
+
+To produce a signed + notarized `.dmg`, set these repo secrets (Settings >
+Secrets and variables > Actions). If `MACOS_CERTIFICATE` is unset, the
+workflow falls back to building an unsigned dmg as before.
+
+| Secret | Value |
+|---|---|
+| `MACOS_CERTIFICATE` | Base64 of your "Developer ID Application" `.p12` export (`base64 -i cert.p12`) |
+| `MACOS_CERTIFICATE_PWD` | Password used when exporting the `.p12` |
+| `MACOS_KEYCHAIN_PWD` | Any random password, used for the temporary CI keychain |
+| `MAC_SIGNING_IDENTITY` | Certificate name, e.g. `Developer ID Application: Your Name (TEAMID)` |
+| `APPLE_ID` | Apple ID email used for notarization |
+| `APPLE_TEAM_ID` | Apple Developer Team ID |
+| `APPLE_APP_SPECIFIC_PASSWORD` | App-specific password for `APPLE_ID` (generate at appleid.apple.com) |
+
+Requires an active Apple Developer Program membership ($99/year).
+
 ## Connect from Odoo POS
 
 1. In Odoo: **Point of Sale > Configuration > Settings**, enable

@@ -31,8 +31,52 @@ jobs:
         if: runner.os == 'Windows'
         run: choco install wixtoolset -y
 
+      - name: Import signing certificate (macOS)
+        if: runner.os == 'macOS'
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PWD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
+          KEYCHAIN_PWD: ${{ secrets.MACOS_KEYCHAIN_PWD }}
+        run: |
+          if [ -z "$MACOS_CERTIFICATE" ]; then
+            echo "MACOS_CERTIFICATE not set, building unsigned dmg"
+            exit 0
+          fi
+          KEYCHAIN=build.keychain
+          echo "$MACOS_CERTIFICATE" | base64 --decode > certificate.p12
+          security create-keychain -p "$KEYCHAIN_PWD" $KEYCHAIN
+          security set-keychain-settings -lut 21600 $KEYCHAIN
+          security unlock-keychain -p "$KEYCHAIN_PWD" $KEYCHAIN
+          security import certificate.p12 -k $KEYCHAIN -P "$MACOS_CERTIFICATE_PWD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PWD" $KEYCHAIN
+          security list-keychains -d user -s $KEYCHAIN $(security list-keychains -d user | sed 's/"//g')
+          rm certificate.p12
+
       - name: Build installer
+        env:
+          MAC_SIGNING_IDENTITY: ${{ secrets.MAC_SIGNING_IDENTITY }}
+          MAC_SIGN: ${{ secrets.MACOS_CERTIFICATE != '' && runner.os == 'macOS' }}
         run: ./gradlew --no-daemon jpackage
+
+      - name: Notarize (macOS)
+        if: runner.os == 'macOS'
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        run: |
+          if [ -z "$MACOS_CERTIFICATE" ]; then
+            echo "MACOS_CERTIFICATE not set, skipping notarization"
+            exit 0
+          fi
+          DMG=$(find build/jpackage -name '*.dmg')
+          xcrun notarytool submit "$DMG" \
+            --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+            --wait
+          xcrun stapler staple "$DMG"
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4

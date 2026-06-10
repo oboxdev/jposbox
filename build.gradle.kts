@@ -103,5 +103,14 @@ tasks.register<Exec>("jpackage") {
         args += listOf("--win-shortcut", "--win-menu", "--win-dir-chooser")
     }
 
+    if (osName.contains("mac")) {
+        args += listOf("--mac-package-identifier", "com.jposbox.app")
+        if (System.getenv("MAC_SIGN") == "true") {
+            val identity = System.getenv("MAC_SIGNING_IDENTITY")
+                ?: throw GradleException("MAC_SIGN=true but MAC_SIGNING_IDENTITY not set")
+            args += listOf("--mac-sign", "--mac-signing-key-user-name", identity)
+        }
+    }
+
     commandLine(args)
 }
