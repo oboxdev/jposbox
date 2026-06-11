@@ -96,7 +96,11 @@ tasks.register<Exec>("jpackage") {
         "--main-class", "com.jposbox.Main",
         "--app-version", project.version.toString(),
         "--vendor", "jPosBox",
-        "--icon", iconFile.asFile.absolutePath
+        "--icon", iconFile.asFile.absolutePath,
+        // jlink's default module detection misses reflection-based usages
+        // (sqlite-jdbc, BouncyCastle, java.net.http), causing
+        // "Failed to launch JVM" on the packaged app. Bundle everything.
+        "--add-modules", "ALL-MODULE-PATH"
     )
 
     if (osName.contains("win")) {
