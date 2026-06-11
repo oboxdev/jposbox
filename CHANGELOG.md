@@ -3,6 +3,21 @@
 All notable changes to jPosBox are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
+## [1.0.1] - 2026-06-11
+
+### Fixed
+- "Failed to launch JVM" on the packaged Windows app — `jpackage` now bundles
+  all JDK modules (`--add-modules ALL-MODULE-PATH`) instead of relying on
+  jlink's automatic detection, which missed reflection-based usages
+  (sqlite-jdbc, BouncyCastle, `java.net.http`).
+- Update check URL (About tab) now defaults to the project's `update.json` on
+  GitHub instead of being blank.
+
+### Added
+- Launch jPosBox automatically at login (Windows registry `Run` key, macOS
+  LaunchAgent, Linux `~/.config/autostart`), toggleable from the Server tab.
+- Optional macOS code signing & notarization in the release workflow.
+
 ## [1.0.0] - 2026-06-09
 
 ### Added

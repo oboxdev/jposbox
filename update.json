@@ -1,5 +1,5 @@
 {
-  "version": "1.0.0",
+  "version": "1.0.1",
   "url": "https://github.com/oboxdev/jposbox/releases/latest",
-  "notes": "See CHANGELOG.md for details."
+  "notes": "Fixes Failed to launch JVM on Windows; adds launch-on-login; macOS code signing support."
 }
