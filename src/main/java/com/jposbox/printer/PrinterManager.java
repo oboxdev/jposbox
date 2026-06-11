@@ -14,6 +14,7 @@ import com.jposbox.config.PrinterConfig;
 import javax.imageio.ImageIO;
 import javax.print.PrintService;
 import javax.print.PrintServiceLookup;
+import javax.print.attribute.standard.PrinterIsAcceptingJobs;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
@@ -137,8 +138,22 @@ public class PrinterManager {
         }
     }
 
-    /** Simple connectivity test: open and immediately close the connection. */
+    /**
+     * Connectivity check used by status_json. For NETWORK printers this opens and
+     * immediately closes a TCP connection. For SYSTEM printers it only looks up the
+     * PrintService and checks its status — opening a PrinterOutputStream creates a
+     * job in the OS print queue, which would saturate the queue on frequent polling.
+     */
     public boolean testConnection(PrinterConfig printer) {
+        if (printer.type == PrinterConfig.Type.SYSTEM) {
+            PrintService service = PrinterOutputStream.getPrintServiceByName(printer.systemPrinterName);
+            if (service == null) {
+                return false;
+            }
+            PrinterIsAcceptingJobs accepting =
+                    (PrinterIsAcceptingJobs) service.getAttribute(PrinterIsAcceptingJobs.class);
+            return accepting == null || accepting == PrinterIsAcceptingJobs.ACCEPTING_JOBS;
+        }
         try (OutputStream out = openConnection(printer)) {
             return true;
         } catch (IOException e) {

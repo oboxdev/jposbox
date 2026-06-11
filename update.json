@@ -1,5 +1,5 @@
 {
-  "version": "1.0.1",
+  "version": "1.0.2",
   "url": "https://github.com/oboxdev/jposbox/releases/latest",
-  "notes": "Fixes Failed to launch JVM on Windows; adds launch-on-login; macOS code signing support."
+  "notes": "Fixes status_json saturating the OS print queue for system/USB printers."
 }

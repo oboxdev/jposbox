@@ -3,6 +3,15 @@
 All notable changes to jPosBox are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
+## [1.0.2] - 2026-06-11
+
+### Fixed
+- `status_json` no longer creates an OS print-queue job for SYSTEM/USB
+  printers on every poll. Connectivity for those is now checked via the
+  `PrintService` status (`PrinterIsAcceptingJobs`) instead of opening a
+  `PrinterOutputStream`, which was saturating the queue under Odoo's
+  periodic status polling.
+
 ## [1.0.1] - 2026-06-11
 
 ### Fixed
