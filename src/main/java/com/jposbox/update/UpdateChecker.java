@@ -1,22 +1,32 @@
 package com.jposbox.update;
 
 import com.google.gson.Gson;
+import com.jposbox.config.AppConfig;
 
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-/** Checks a remote JSON manifest for newer versions. Never auto-installs, only reports. */
+/**
+ * Checks a remote JSON manifest for newer versions and can download the matching
+ * installer for the current OS. Never installs silently — the downloaded
+ * installer is opened with the OS's native handler (Finder/dmg, msiexec, etc.),
+ * which still requires the user to click through it.
+ */
 public class UpdateChecker {
 
     private static final Logger LOG = Logger.getLogger(UpdateChecker.class.getName());
     private static final Gson GSON = new Gson();
+    private static final String GITHUB_REPO = "oboxdev/jposbox";
 
     /** Returns the version baked into the jar manifest by jpackage/shadowJar, or "dev" outside a jar. */
     public static String getCurrentVersion() {
@@ -32,6 +42,7 @@ public class UpdateChecker {
         try {
             HttpClient client = HttpClient.newBuilder()
                     .connectTimeout(Duration.ofSeconds(5))
+                    .followRedirects(HttpClient.Redirect.NORMAL)
                     .build();
             HttpRequest req = HttpRequest.newBuilder(URI.create(updateUrl))
                     .timeout(Duration.ofSeconds(5))
@@ -75,6 +86,45 @@ public class UpdateChecker {
             }
         }
         return 0;
+    }
+
+    /** Installer file name published by the release workflow for the current OS. */
+    public static String assetFileName(String version) {
+        String os = System.getProperty("os.name").toLowerCase(Locale.ROOT);
+        if (os.contains("mac")) {
+            return "jPosBox-" + version + ".dmg";
+        }
+        if (os.contains("win")) {
+            return "jPosBox-" + version + ".msi";
+        }
+        return "jposbox_" + version + "-1_amd64.deb";
+    }
+
+    /** GitHub Releases download URL for the installer matching the current OS. */
+    public static String assetDownloadUrl(String version) {
+        return "https://github.com/" + GITHUB_REPO + "/releases/download/v" + version + "/" + assetFileName(version);
+    }
+
+    /** Downloads the installer to ~/.jposbox/updates/ and returns its path. */
+    public static Path downloadInstaller(String url) throws IOException, InterruptedException {
+        Path dir = AppConfig.homeDir().resolve("updates");
+        Files.createDirectories(dir);
+        Path dest = dir.resolve(url.substring(url.lastIndexOf('/') + 1));
+
+        HttpClient client = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(10))
+                .followRedirects(HttpClient.Redirect.NORMAL)
+                .build();
+        HttpRequest req = HttpRequest.newBuilder(URI.create(url))
+                .timeout(Duration.ofMinutes(10))
+                .GET()
+                .build();
+        HttpResponse<Path> resp = client.send(req, HttpResponse.BodyHandlers.ofFile(dest));
+        if (resp.statusCode() != 200) {
+            Files.deleteIfExists(dest);
+            throw new IOException("Download failed: HTTP " + resp.statusCode());
+        }
+        return dest;
     }
 
     private static int parsePart(String[] parts, int i) {

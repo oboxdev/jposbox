@@ -260,10 +260,14 @@ public class ConfigWindow extends JFrame {
 
         JLabel resultLabel = new JLabel(" ");
         JButton checkButton = new JButton("Check for updates");
+        JButton installButton = new JButton("Download && Install");
+        installButton.setEnabled(false);
+
         checkButton.addActionListener(e -> {
             config.updateCheckUrl = updateUrlField.getText().trim();
             config.save();
             resultLabel.setText("Checking...");
+            installButton.setEnabled(false);
             new SwingWorker<Optional<UpdateInfo>, Void>() {
                 @Override
                 protected Optional<UpdateInfo> doInBackground() {
@@ -279,6 +283,8 @@ public class ConfigWindow extends JFrame {
                             resultLabel.setText("<html>New version available: <b>" + info.version + "</b>"
                                     + (info.url != null ? " — <a href=\"" + info.url + "\">" + info.url + "</a>" : "")
                                     + (info.notes != null ? "<br>" + info.notes : "") + "</html>");
+                            installButton.setEnabled(true);
+                            installButton.putClientProperty("updateInfo", info);
                         } else {
                             resultLabel.setText("You're up to date (" + UpdateChecker.getCurrentVersion() + ").");
                         }
@@ -289,10 +295,42 @@ public class ConfigWindow extends JFrame {
             }.execute();
         });
 
+        installButton.addActionListener(e -> {
+            UpdateInfo info = (UpdateInfo) installButton.getClientProperty("updateInfo");
+            if (info == null) {
+                return;
+            }
+            installButton.setEnabled(false);
+            resultLabel.setText("Downloading " + UpdateChecker.assetFileName(info.version) + "...");
+            new SwingWorker<java.nio.file.Path, Void>() {
+                @Override
+                protected java.nio.file.Path doInBackground() throws Exception {
+                    return UpdateChecker.downloadInstaller(UpdateChecker.assetDownloadUrl(info.version));
+                }
+
+                @Override
+                protected void done() {
+                    try {
+                        java.nio.file.Path file = get();
+                        resultLabel.setText("Downloaded. Opening installer — follow the prompts to finish.");
+                        if (Desktop.isDesktopSupported()) {
+                            Desktop.getDesktop().open(file.toFile());
+                        }
+                    } catch (Exception ex) {
+                        resultLabel.setText("Download failed: " + ex.getMessage());
+                        installButton.setEnabled(true);
+                    }
+                }
+            }.execute();
+        });
+
         c.gridx = 0;
         c.gridy++;
         c.gridwidth = 2;
         panel.add(checkButton, c);
+
+        c.gridy++;
+        panel.add(installButton, c);
 
         c.gridy++;
         panel.add(resultLabel, c);

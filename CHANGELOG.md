@@ -3,6 +3,14 @@
 All notable changes to jPosBox are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
+## [1.0.3] - 2026-06-11
+
+### Added
+- "Download & Install" button in the About tab: downloads the installer
+  matching the current OS from GitHub Releases (`~/.jposbox/updates/`) and
+  opens it with the OS's native handler (Finder/dmg, msiexec, deb). The user
+  still has to click through the installer — nothing is installed silently.
+
 ## [1.0.2] - 2026-06-11
 
 ### Fixed

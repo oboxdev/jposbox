@@ -1,5 +1,5 @@
 {
-  "version": "1.0.2",
+  "version": "1.0.3",
   "url": "https://github.com/oboxdev/jposbox/releases/latest",
-  "notes": "Fixes status_json saturating the OS print queue for system/USB printers."
+  "notes": "Adds Download & Install button in About tab to fetch and launch the installer for new versions."
 }
