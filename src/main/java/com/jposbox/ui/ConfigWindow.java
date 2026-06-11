@@ -6,6 +6,7 @@ import com.jposbox.config.AppConfig;
 import com.jposbox.config.PrinterConfig;
 import com.jposbox.printer.PrinterManager;
 import com.jposbox.server.ApiServer;
+import com.jposbox.startup.AutoStart;
 import com.jposbox.update.UpdateChecker;
 import com.jposbox.update.UpdateInfo;
 
@@ -31,6 +32,7 @@ public class ConfigWindow extends JFrame {
     private final JSpinner httpPortSpinner;
     private final JSpinner httpsPortSpinner;
     private final JCheckBox httpsEnabledCheck;
+    private final JCheckBox runAtStartupCheck;
 
     private final JTextArea logArea = new JTextArea();
 
@@ -55,6 +57,7 @@ public class ConfigWindow extends JFrame {
         httpPortSpinner = new JSpinner(new SpinnerNumberModel(config.httpPort, 1, 65535, 1));
         httpsPortSpinner = new JSpinner(new SpinnerNumberModel(config.httpsPort, 1, 65535, 1));
         httpsEnabledCheck = new JCheckBox("Enable HTTPS", config.httpsEnabled);
+        runAtStartupCheck = new JCheckBox("Launch jPosBox at login", config.runAtStartup);
 
         JPanel settingsPanel = buildSettingsPanel();
 
@@ -204,12 +207,20 @@ public class ConfigWindow extends JFrame {
         c.gridx = 1;
         panel.add(httpsPortSpinner, c);
 
+        c.gridx = 0;
+        c.gridy++;
+        c.gridwidth = 2;
+        panel.add(runAtStartupCheck, c);
+        c.gridwidth = 1;
+
         JButton save = new JButton("Save & Restart Server");
         save.addActionListener(e -> {
             config.httpPort = (Integer) httpPortSpinner.getValue();
             config.httpsPort = (Integer) httpsPortSpinner.getValue();
             config.httpsEnabled = httpsEnabledCheck.isSelected();
+            config.runAtStartup = runAtStartupCheck.isSelected();
             config.save();
+            AutoStart.apply(config.runAtStartup);
             try {
                 apiServer.restart();
                 JOptionPane.showMessageDialog(this, "Server restarted.");

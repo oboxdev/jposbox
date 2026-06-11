@@ -31,6 +31,7 @@ public class AppConfig {
     public int httpPort = 8008;
     public int httpsPort = 8443;
     public boolean httpsEnabled = true;
+    public boolean runAtStartup = true;
     public String updateCheckUrl = DEFAULT_UPDATE_CHECK_URL;
     public List<PrinterConfig> printers = new ArrayList<>();
 
@@ -115,6 +116,7 @@ public class AppConfig {
                     case "httpPort" -> cfg.httpPort = Integer.parseInt(value);
                     case "httpsPort" -> cfg.httpsPort = Integer.parseInt(value);
                     case "httpsEnabled" -> cfg.httpsEnabled = Boolean.parseBoolean(value);
+                    case "runAtStartup" -> cfg.runAtStartup = Boolean.parseBoolean(value);
                     case "updateCheckUrl" -> {
                         if (value != null && !value.isBlank()) {
                             cfg.updateCheckUrl = value;
@@ -159,6 +161,9 @@ public class AppConfig {
             ps.addBatch();
             ps.setString(1, "httpsEnabled");
             ps.setString(2, String.valueOf(httpsEnabled));
+            ps.addBatch();
+            ps.setString(1, "runAtStartup");
+            ps.setString(2, String.valueOf(runAtStartup));
             ps.addBatch();
             ps.setString(1, "updateCheckUrl");
             ps.setString(2, updateCheckUrl == null ? "" : updateCheckUrl);

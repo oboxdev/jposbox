@@ -3,6 +3,7 @@ package com.jposbox;
 import com.jposbox.config.AppConfig;
 import com.jposbox.printer.PrinterManager;
 import com.jposbox.server.ApiServer;
+import com.jposbox.startup.AutoStart;
 import com.jposbox.ui.TrayApp;
 
 import java.awt.GraphicsEnvironment;
@@ -19,6 +20,7 @@ public class Main {
         setupLogging();
 
         AppConfig config = AppConfig.load();
+        AutoStart.apply(config.runAtStartup);
         PrinterManager printerManager = new PrinterManager();
         ApiServer apiServer = new ApiServer(config, printerManager);
         apiServer.start();
