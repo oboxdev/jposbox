@@ -1,5 +1,5 @@
 {
-  "version": "1.0.3",
+  "version": "1.1.0",
   "url": "https://github.com/oboxdev/jposbox/releases/latest",
-  "notes": "Adds Download & Install button in About tab to fetch and launch the installer for new versions."
+  "notes": "Route multiple printers from one jPosBox: give each printer an Odoo route and point each pos.printer's Proxy IP at <host>:<port>/<route>."
 }

@@ -88,6 +88,7 @@ public class ConfigWindow extends JFrame {
         JButton edit = new JButton("Edit");
         JButton remove = new JButton("Remove");
         JButton setDefault = new JButton("Set Default");
+        JButton copyUrl = new JButton("Odoo URL");
         JButton testPrint = new JButton("Test Print");
         JButton openDrawer = new JButton("Open Drawer");
 
@@ -100,6 +101,7 @@ public class ConfigWindow extends JFrame {
                 config.printers.add(p);
                 config.save();
                 tableModel.fireTableDataChanged();
+                warnOnDuplicateRoutes();
             }
         });
 
@@ -112,9 +114,11 @@ public class ConfigWindow extends JFrame {
             PrinterConfig updated = new PrinterDialog(this, existing).showDialog();
             if (updated != null) {
                 updated.isDefault = existing.isDefault;
+                updated.id = existing.id;
                 config.printers.set(row, updated);
                 config.save();
                 tableModel.fireTableDataChanged();
+                warnOnDuplicateRoutes();
             }
         });
 
@@ -139,6 +143,15 @@ public class ConfigWindow extends JFrame {
             config.printers.get(row).isDefault = true;
             config.save();
             tableModel.fireTableDataChanged();
+        });
+
+        copyUrl.addActionListener(e -> {
+            int row = table.getSelectedRow();
+            if (row < 0) {
+                JOptionPane.showMessageDialog(this, "Select a printer first.");
+                return;
+            }
+            showOdooUrl(config.printers.get(row));
         });
 
         testPrint.addActionListener(e -> {
@@ -180,9 +193,55 @@ public class ConfigWindow extends JFrame {
         panel.add(edit);
         panel.add(remove);
         panel.add(setDefault);
+        panel.add(copyUrl);
         panel.add(testPrint);
         panel.add(openDrawer);
         return panel;
+    }
+
+    /**
+     * Shows the value to paste into the Odoo pos.printer "Proxy IP" field for this
+     * printer, and copies it to the clipboard. Odoo appends "/hw_proxy/<endpoint>"
+     * to it, so the trailing route segment is what tells jPosBox which printer to
+     * use.
+     */
+    private void showOdooUrl(PrinterConfig printer) {
+        String slug = printer.routeSlug();
+        String proxyIp = localAddress() + ":" + config.httpPort + (slug.isEmpty() ? "" : "/" + slug);
+        Toolkit.getDefaultToolkit().getSystemClipboard()
+                .setContents(new java.awt.datatransfer.StringSelection(proxyIp), null);
+
+        String message = "<html>Paste this into Odoo &rarr; Point of Sale &rarr; Printers &rarr;"
+                + " <b>Proxy IP</b>:<br><br><b>" + proxyIp + "</b><br><br>"
+                + "(copied to the clipboard)<br><br>Odoo will then call"
+                + " <tt>/" + (slug.isEmpty() ? "" : slug + "/") + "hw_proxy/&lt;endpoint&gt;</tt>"
+                + (slug.isEmpty()
+                        ? ", which prints on the default printer."
+                        : ", which prints on <b>" + printer.name + "</b>.")
+                + "</html>";
+        JOptionPane.showMessageDialog(this, message, "Odoo proxy IP for " + printer.name,
+                JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    private static String localAddress() {
+        try {
+            return java.net.InetAddress.getLocalHost().getHostAddress();
+        } catch (java.net.UnknownHostException e) {
+            return "<this-machine-ip>";
+        }
+    }
+
+    /** Two printers sharing a route make that route ambiguous — the first one always wins. */
+    private void warnOnDuplicateRoutes() {
+        List<String> duplicates = config.duplicateRouteSlugs();
+        if (duplicates.isEmpty()) {
+            return;
+        }
+        JOptionPane.showMessageDialog(this,
+                "More than one printer answers to the route(s): " + String.join(", ", duplicates)
+                        + "\nOdoo can only reach the first of them. Give each printer a distinct"
+                        + " \"Odoo route\" value.",
+                "Duplicate printer route", JOptionPane.WARNING_MESSAGE);
     }
 
     private JPanel buildSettingsPanel() {
@@ -357,7 +416,7 @@ public class ConfigWindow extends JFrame {
     }
 
     private class PrinterTableModel extends AbstractTableModel {
-        private final String[] columns = {"Name", "Type", "Connection", "Default", "Cut", "Drawer"};
+        private final String[] columns = {"Name", "Route", "Type", "Connection", "Default", "Cut", "Drawer"};
 
         @Override
         public int getRowCount() {
@@ -379,18 +438,19 @@ public class ConfigWindow extends JFrame {
             PrinterConfig p = config.printers.get(rowIndex);
             return switch (columnIndex) {
                 case 0 -> p.name;
-                case 1 -> p.type.toString();
-                case 2 -> p.type == PrinterConfig.Type.NETWORK ? p.host + ":" + p.port : p.systemPrinterName;
-                case 3 -> p.isDefault;
-                case 4 -> p.cutAfterPrint;
-                case 5 -> p.openDrawerAfterPrint;
+                case 1 -> p.routeSlug();
+                case 2 -> p.type.toString();
+                case 3 -> p.type == PrinterConfig.Type.NETWORK ? p.host + ":" + p.port : p.systemPrinterName;
+                case 4 -> p.isDefault;
+                case 5 -> p.cutAfterPrint;
+                case 6 -> p.openDrawerAfterPrint;
                 default -> "";
             };
         }
 
         @Override
         public Class<?> getColumnClass(int columnIndex) {
-            if (columnIndex >= 3) {
+            if (columnIndex >= 4) {
                 return Boolean.class;
             }
             return String.class;

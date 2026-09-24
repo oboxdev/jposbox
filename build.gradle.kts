@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "com.jposbox"
-version = "1.0.3"
+version = "1.1.0"
 
 java {
     toolchain {
@@ -26,6 +26,7 @@ dependencies {
 
     testImplementation(platform("org.junit:junit-bom:5.10.2"))
     testImplementation("org.junit.jupiter:junit-jupiter")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
 application {

@@ -12,6 +12,8 @@ public class PrinterDialog extends JDialog {
     private boolean confirmed = false;
 
     private final JTextField nameField = new JTextField(18);
+    private final JTextField slugField = new JTextField(18);
+    private final JLabel routePreview = new JLabel(" ");
     private final JComboBox<PrinterConfig.Type> typeCombo = new JComboBox<>(PrinterConfig.Type.values());
     private final JTextField hostField = new JTextField(15);
     private final JSpinner portSpinner = new JSpinner(new SpinnerNumberModel(9100, 1, 65535, 1));
@@ -43,6 +45,10 @@ public class PrinterDialog extends JDialog {
         c.anchor = GridBagConstraints.WEST;
 
         addRow(form, c, "Name:", nameField);
+        slugField.setToolTipText("Leave blank to derive it from the name");
+        addRow(form, c, "Odoo route:", slugField);
+        routePreview.setFont(routePreview.getFont().deriveFont(Font.PLAIN, 11f));
+        addRow(form, c, " ", routePreview);
         addRow(form, c, "Type:", typeCombo);
 
         // NETWORK card
@@ -83,6 +89,26 @@ public class PrinterDialog extends JDialog {
         c.gridy++;
         addRow(form, c, "Chars per line:", widthSpinner);
 
+        javax.swing.event.DocumentListener refreshPreview = new javax.swing.event.DocumentListener() {
+            @Override
+            public void insertUpdate(javax.swing.event.DocumentEvent e) {
+                updateRoutePreview();
+            }
+
+            @Override
+            public void removeUpdate(javax.swing.event.DocumentEvent e) {
+                updateRoutePreview();
+            }
+
+            @Override
+            public void changedUpdate(javax.swing.event.DocumentEvent e) {
+                updateRoutePreview();
+            }
+        };
+        nameField.getDocument().addDocumentListener(refreshPreview);
+        slugField.getDocument().addDocumentListener(refreshPreview);
+        updateRoutePreview();
+
         typeCombo.addActionListener(e -> cardLayout.show(cards, ((PrinterConfig.Type) typeCombo.getSelectedItem()).name()));
         cardLayout.show(cards, PrinterConfig.Type.NETWORK.name());
 
@@ -104,6 +130,17 @@ public class PrinterDialog extends JDialog {
         getRootPane().setDefaultButton(okButton);
     }
 
+    /** Shows the path Odoo must be pointed at for the values currently typed in. */
+    private void updateRoutePreview() {
+        PrinterConfig probe = new PrinterConfig();
+        probe.name = nameField.getText();
+        probe.slug = slugField.getText();
+        String slug = probe.routeSlug();
+        routePreview.setText(slug.isEmpty()
+                ? "No route yet — this printer is only reachable as the default one."
+                : "Odoo proxy IP: <host>:<port>/" + slug + "   (path: /" + slug + "/hw_proxy/...)");
+    }
+
     private GridBagConstraints gbc(GridBagConstraints template, int x) {
         GridBagConstraints c = (GridBagConstraints) template.clone();
         c.gridx = x;
@@ -122,6 +159,7 @@ public class PrinterDialog extends JDialog {
 
     private void populate(PrinterConfig p) {
         nameField.setText(p.name);
+        slugField.setText(p.slug == null ? "" : p.slug);
         typeCombo.setSelectedItem(p.type);
         hostField.setText(p.host == null ? "" : p.host);
         portSpinner.setValue(p.port);
@@ -142,6 +180,7 @@ public class PrinterDialog extends JDialog {
         }
         PrinterConfig p = new PrinterConfig();
         p.name = nameField.getText().trim();
+        p.slug = slugField.getText().trim();
         p.type = (PrinterConfig.Type) typeCombo.getSelectedItem();
         p.host = hostField.getText().trim();
         p.port = (Integer) portSpinner.getValue();

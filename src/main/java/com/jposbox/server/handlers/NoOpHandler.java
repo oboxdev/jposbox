@@ -2,6 +2,7 @@ package com.jposbox.server.handlers;
 
 import com.google.gson.JsonObject;
 import com.jposbox.server.JsonRpcHandler;
+import com.sun.net.httpserver.HttpExchange;
 
 /**
  * Stub for hw_proxy endpoints we don't need to act on (scan_item_success,
@@ -17,7 +18,7 @@ public class NoOpHandler extends JsonRpcHandler {
     }
 
     @Override
-    protected Object process(JsonObject params) {
+    protected Object process(JsonObject params, HttpExchange exchange) {
         return result;
     }
 }
