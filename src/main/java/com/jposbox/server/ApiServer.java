@@ -11,6 +11,7 @@ import com.jposbox.server.handlers.PrintReceiptHandler;
 import com.jposbox.server.handlers.PrintXmlReceiptHandler;
 import com.jposbox.server.handlers.StatusJsonHandler;
 import com.jposbox.tls.SelfSignedCert;
+import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 import com.sun.net.httpserver.HttpsConfigurator;
 import com.sun.net.httpserver.HttpsServer;
@@ -20,7 +21,8 @@ import javax.net.ssl.SSLContext;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.security.KeyStore;
-import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.logging.Level;
@@ -93,20 +95,30 @@ public class ApiServer {
         return sslContext;
     }
 
+    /**
+     * All requests go through a single "/" context: the printer a call targets is
+     * encoded in the path (see {@link PrinterRouter}), so the endpoint can't be a
+     * fixed HttpServer context any more. {@link RouteDispatcher} pulls the endpoint
+     * out of the path and delegates here.
+     */
     private void registerRoutes(HttpServer server) {
-        server.createContext("/hw_proxy/hello", new HelloHandler()).getFilters().add(new CorsFilter());
-        server.createContext("/hw_proxy/handshake", new HandshakeHandler()).getFilters().add(new CorsFilter());
-        server.createContext("/hw_proxy/status_json", new StatusJsonHandler(config, printerManager)).getFilters().add(new CorsFilter());
-        server.createContext("/hw_proxy/print_receipt", new PrintReceiptHandler(config, printerManager)).getFilters().add(new CorsFilter());
-        server.createContext("/hw_proxy/print_xml_receipt", new PrintXmlReceiptHandler(config, printerManager)).getFilters().add(new CorsFilter());
-        server.createContext("/hw_proxy/open_cashbox", new OpenCashboxHandler(config, printerManager)).getFilters().add(new CorsFilter());
-        server.createContext("/hw_proxy/default_printer_action", new DefaultPrinterActionHandler(config, printerManager)).getFilters().add(new CorsFilter());
+        PrinterRouter router = new PrinterRouter(config);
+        Map<String, HttpHandler> endpoints = new LinkedHashMap<>();
+
+        endpoints.put("hello", new HelloHandler(router));
+        endpoints.put("handshake", new HandshakeHandler());
+        endpoints.put("status_json", new StatusJsonHandler(router, printerManager));
+        endpoints.put("print_receipt", new PrintReceiptHandler(router, printerManager));
+        endpoints.put("print_xml_receipt", new PrintXmlReceiptHandler(router, printerManager));
+        endpoints.put("open_cashbox", new OpenCashboxHandler(router, printerManager));
+        endpoints.put("default_printer_action", new DefaultPrinterActionHandler(router, printerManager));
 
         // Endpoints Odoo POS calls but that don't need real action here.
-        for (String path : List.of("/hw_proxy/scan_item_success", "/hw_proxy/scan_item_error_unrecognized")) {
-            server.createContext(path, new NoOpHandler(true)).getFilters().add(new CorsFilter());
-        }
-        server.createContext("/hw_proxy/test_ownership", new NoOpHandler(true)).getFilters().add(new CorsFilter());
-        server.createContext("/hw_proxy/take_control", new NoOpHandler(java.util.Map.of("status", "OWNER"))).getFilters().add(new CorsFilter());
+        endpoints.put("scan_item_success", new NoOpHandler(true));
+        endpoints.put("scan_item_error_unrecognized", new NoOpHandler(true));
+        endpoints.put("test_ownership", new NoOpHandler(true));
+        endpoints.put("take_control", new NoOpHandler(Map.of("status", "OWNER")));
+
+        server.createContext("/", new RouteDispatcher(endpoints)).getFilters().add(new CorsFilter());
     }
 }

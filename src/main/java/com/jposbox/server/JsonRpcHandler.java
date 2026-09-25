@@ -40,7 +40,7 @@ public abstract class JsonRpcHandler implements HttpHandler {
                     }
                 }
             }
-            Object result = process(params);
+            Object result = process(params, exchange);
             JsonObject response = new JsonObject();
             response.addProperty("jsonrpc", "2.0");
             response.add("id", GSON.toJsonTree(id));
@@ -58,8 +58,11 @@ public abstract class JsonRpcHandler implements HttpHandler {
         }
     }
 
-    /** Implement the call; return the JSON-RPC "result" payload. */
-    protected abstract Object process(JsonObject params) throws Exception;
+    /**
+     * Implement the call; return the JSON-RPC "result" payload. The exchange is
+     * passed in so handlers can resolve which printer the path targets.
+     */
+    protected abstract Object process(JsonObject params, HttpExchange exchange) throws Exception;
 
     protected static void sendJson(HttpExchange exchange, int status, Object body) throws IOException {
         byte[] bytes = GSON.toJson(body).getBytes(StandardCharsets.UTF_8);

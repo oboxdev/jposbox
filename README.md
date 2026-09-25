@@ -29,9 +29,13 @@ In the **Printers** tab:
   - `NETWORK`: ESC/POS thermal printer reachable on the LAN, usually port `9100`.
   - `SYSTEM`: a printer already installed/registered with the OS (USB printers
     typically show up here once their driver is installed).
-- Mark one printer as **Default** — this is the one used for `print_receipt`
-  and `open_cashbox`.
-- Use **Test Print** / **Open Drawer** to verify the connection.
+- Set the **Odoo route** for each printer (or leave it blank to derive it from
+  the name) — this is how Odoo picks *which* printer a job goes to. See
+  [Multiple printers](#multiple-printers).
+- Mark one printer as **Default** — this is the one used when a request carries
+  no route.
+- Use **Test Print** / **Open Drawer** to verify the connection, and
+  **Odoo URL** to copy the exact value to paste into Odoo's *Proxy IP* field.
 
 In the **Server** tab, set the HTTP/HTTPS ports (defaults `8008` / `8443`) and
 restart the server after changes.
@@ -91,16 +95,57 @@ Requires an active Apple Developer Program membership ($99/year).
 3. Print a receipt from the POS — it's converted from Odoo's receipt HTML to
    ESC/POS and sent to the default printer.
 
+## Multiple printers
+
+One jPosBox instance can drive several printers (cashier, kitchen, bar) on a
+single port. Odoo picks the printer through the URL: it builds its request as
+`<proxy_ip>` + `/hw_proxy/<endpoint>`, so a trailing path segment on the proxy
+IP becomes a printer selector.
+
+1. Give each printer a distinct **Odoo route** in the Printers tab (e.g.
+   `kitchen`). Blank derives it from the name — "Cocina Caliente" becomes
+   `cocina-caliente`. Matching ignores case, accents and separators.
+2. In Odoo, **Point of Sale > Configuration > Printers**, create one
+   `pos.printer` per device and set its **Proxy IP** to
+   `<host>:<port>/<route>`, then assign its product categories.
+
+| Odoo Proxy IP | Request that arrives | Printer used |
+|---|---|---|
+| `192.168.1.50:8008` | `/hw_proxy/print_receipt` | the **Default** printer |
+| `192.168.1.50:8008/kitchen` | `/kitchen/hw_proxy/print_receipt` | `kitchen` |
+| `192.168.1.50:8008/bar` | `/bar/hw_proxy/print_receipt` | `bar` |
+
+The **Odoo URL** button in the Printers tab prints the exact string to paste
+and copies it to the clipboard.
+
+Two other forms select a printer as well, for tooling and manual tests:
+
+```bash
+curl http://192.168.1.50:8008/hw_proxy/kitchen/status_json     # route as infix
+curl 'http://192.168.1.50:8008/hw_proxy/status_json?printer=kitchen'
+```
+
+A route that no printer answers to is **rejected**, not silently redirected to
+the default printer — a typo would otherwise send kitchen orders to the
+cashier. `hello` replies `404`, `status_json` reports
+`{"status":"disconnected"}`, and print calls return a JSON-RPC error naming the
+configured routes.
+
 ## Endpoints implemented
+
+Every endpoint below also exists as `/<route>/hw_proxy/<endpoint>` and
+`/hw_proxy/<route>/<endpoint>`; without a route it acts on the default printer.
 
 - `GET  /hw_proxy/hello` — health check
 - `POST /hw_proxy/handshake`
-- `GET  /hw_proxy/status_json` — configured printers + reachability
+- `GET  /hw_proxy/status_json` — configured printers + reachability (only the
+  routed printer when the path names one)
 - `POST /hw_proxy/print_receipt` — `{ "receipt": "<html>..." }`
 - `POST /hw_proxy/print_xml_receipt` — compat stub, prints text content only
 - `POST /hw_proxy/open_cashbox`
-- `POST /hw_proxy/default_printer_action` — Odoo 19: `{"data":{"action":"print_receipt","receipt":"<base64 JPEG/PNG>"}}`,
-  printed as a raster bitmap (scaled to `printerWidthPx`); `action: "open_cashbox"`/`"cashbox"` pulses the drawer
+- `POST /hw_proxy/default_printer_action` — Odoo 17-19: `{"data":{"action":"print_receipt","receipt":"<base64 JPEG/PNG>"}}`,
+  printed as a raster bitmap (scaled to `printerWidthPx`); `action: "open_cashbox"`/`"cashbox"` pulses the drawer.
+  Despite the name, it prints on the routed printer, not only on the default one
 - `POST /hw_proxy/scan_item_success` / `scan_item_error_unrecognized` — no-ops
 - `POST /hw_proxy/test_ownership` / `take_control` — no-ops
 
@@ -133,6 +178,7 @@ runs on — build on each target OS separately:
 ## Config & logs
 
 - Config: `~/.jposbox/config.db` (SQLite; legacy `config.json` is
-  auto-migrated and renamed to `config.json.bak`)
+  auto-migrated and renamed to `config.json.bak`). The `printers.slug` column is
+  added automatically on first run of 1.1.0+
 - TLS keystore: `~/.jposbox/keystore.p12`
 - Logs: `~/.jposbox/logs/app.log`

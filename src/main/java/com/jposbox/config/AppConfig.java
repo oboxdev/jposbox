@@ -56,6 +56,7 @@ public class AppConfig {
         AppConfig cfg = new AppConfig();
         try (Connection conn = DriverManager.getConnection(jdbcUrl())) {
             createSchema(conn);
+            migrateSchema(conn);
             migrateLegacyJsonIfNeeded(conn);
             loadSettings(conn, cfg);
             loadPrinters(conn, cfg);
@@ -68,6 +69,7 @@ public class AppConfig {
     public void save() {
         try (Connection conn = DriverManager.getConnection(jdbcUrl())) {
             createSchema(conn);
+            migrateSchema(conn);
             conn.setAutoCommit(false);
             saveSettings(conn);
             savePrinters(conn);
@@ -86,6 +88,36 @@ public class AppConfig {
         return printers.stream().filter(p -> p.name.equals(name)).findFirst();
     }
 
+    /**
+     * Resolves the printer addressed by a route key (the segment Odoo appends to
+     * its proxy_ip). Matching is slug-normalised, so "Cocina Caliente",
+     * "cocina-caliente" and "COCINA_CALIENTE" all hit the same printer.
+     */
+    public Optional<PrinterConfig> getPrinterByRoute(String routeKey) {
+        String key = PrinterConfig.slugify(routeKey);
+        if (key.isEmpty()) {
+            return Optional.empty();
+        }
+        return printers.stream().filter(p -> key.equals(p.routeSlug())).findFirst();
+    }
+
+    /** Route keys that more than one printer answers to — such a route is ambiguous. */
+    public List<String> duplicateRouteSlugs() {
+        List<String> seen = new ArrayList<>();
+        List<String> duplicates = new ArrayList<>();
+        for (PrinterConfig p : printers) {
+            String slug = p.routeSlug();
+            if (slug.isEmpty()) {
+                continue;
+            }
+            if (seen.contains(slug) && !duplicates.contains(slug)) {
+                duplicates.add(slug);
+            }
+            seen.add(slug);
+        }
+        return duplicates;
+    }
+
     private static void createSchema(Connection conn) throws SQLException {
         try (Statement st = conn.createStatement()) {
             st.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)");
@@ -93,6 +125,7 @@ public class AppConfig {
                     CREATE TABLE IF NOT EXISTS printers (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         name TEXT NOT NULL,
+                        slug TEXT,
                         type TEXT NOT NULL,
                         is_default INTEGER NOT NULL DEFAULT 0,
                         host TEXT,
@@ -104,6 +137,26 @@ public class AppConfig {
                         printer_width_px INTEGER NOT NULL DEFAULT 576
                     )
                     """);
+        }
+    }
+
+    /**
+     * Adds columns introduced after a user's DB was first created. SQLite has no
+     * "ADD COLUMN IF NOT EXISTS", so the existing columns are inspected first.
+     */
+    private static void migrateSchema(Connection conn) throws SQLException {
+        List<String> columns = new ArrayList<>();
+        try (Statement st = conn.createStatement();
+             ResultSet rs = st.executeQuery("PRAGMA table_info(printers)")) {
+            while (rs.next()) {
+                columns.add(rs.getString("name"));
+            }
+        }
+        if (!columns.contains("slug")) {
+            try (Statement st = conn.createStatement()) {
+                st.execute("ALTER TABLE printers ADD COLUMN slug TEXT");
+            }
+            LOG.info("Added 'slug' column to printers table (per-printer route key)");
         }
     }
 
@@ -135,6 +188,7 @@ public class AppConfig {
                 PrinterConfig p = new PrinterConfig();
                 p.id = rs.getLong("id");
                 p.name = rs.getString("name");
+                p.slug = rs.getString("slug");
                 p.type = PrinterConfig.Type.valueOf(rs.getString("type"));
                 p.isDefault = rs.getInt("is_default") != 0;
                 p.host = rs.getString("host");
@@ -177,20 +231,21 @@ public class AppConfig {
             st.execute("DELETE FROM printers");
         }
         try (PreparedStatement ps = conn.prepareStatement(
-                "INSERT INTO printers(name, type, is_default, host, port, system_printer_name, "
+                "INSERT INTO printers(name, slug, type, is_default, host, port, system_printer_name, "
                         + "cut_after_print, open_drawer_after_print, char_width, printer_width_px) "
-                        + "VALUES (?,?,?,?,?,?,?,?,?,?)")) {
+                        + "VALUES (?,?,?,?,?,?,?,?,?,?,?)")) {
             for (PrinterConfig p : printers) {
                 ps.setString(1, p.name);
-                ps.setString(2, p.type.name());
-                ps.setInt(3, p.isDefault ? 1 : 0);
-                ps.setString(4, p.host);
-                ps.setInt(5, p.port);
-                ps.setString(6, p.systemPrinterName);
-                ps.setInt(7, p.cutAfterPrint ? 1 : 0);
-                ps.setInt(8, p.openDrawerAfterPrint ? 1 : 0);
-                ps.setInt(9, p.charWidth);
-                ps.setInt(10, p.printerWidthPx);
+                ps.setString(2, p.slug);
+                ps.setString(3, p.type.name());
+                ps.setInt(4, p.isDefault ? 1 : 0);
+                ps.setString(5, p.host);
+                ps.setInt(6, p.port);
+                ps.setString(7, p.systemPrinterName);
+                ps.setInt(8, p.cutAfterPrint ? 1 : 0);
+                ps.setInt(9, p.openDrawerAfterPrint ? 1 : 0);
+                ps.setInt(10, p.charWidth);
+                ps.setInt(11, p.printerWidthPx);
                 ps.addBatch();
             }
             ps.executeBatch();

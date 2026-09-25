@@ -3,6 +3,36 @@
 All notable changes to jPosBox are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
+## [1.1.0] - 2026-09-24
+
+### Added
+- Route multiple printers from a single jPosBox instance. Every `hw_proxy`
+  endpoint now also answers at `/<route>/hw_proxy/<endpoint>` (the form Odoo
+  produces when a `pos.printer`'s *Proxy IP* carries a trailing path, e.g.
+  `192.168.1.50:8008/kitchen`) and at `/hw_proxy/<route>/<endpoint>`, printing
+  on the printer that owns that route instead of always on the default one.
+  A `?printer=<route>` query parameter does the same for manual testing.
+- Per-printer **Odoo route** key (`printers.slug`), editable in the Printers
+  tab and shown as a column. Blank derives the route from the printer name;
+  matching is slug-normalised, so "Cocina Caliente", `cocina-caliente` and
+  `COCINA_CALIENTE` all resolve to the same printer. Duplicate routes raise a
+  warning, since only the first such printer would be reachable.
+- **Odoo URL** button in the Printers tab: shows and copies the exact value to
+  paste into Odoo's *Proxy IP* field for the selected printer.
+- `status_json` reports the `route` of each printer, and reports only the routed
+  printer when the request path names one, so each `pos.printer` in Odoo sees
+  its own device's reachability rather than every printer on the box.
+
+### Changed
+- Requests to a route no printer answers to now fail loudly instead of falling
+  back to the default printer — a mistyped route would otherwise print kitchen
+  orders on the cashier's printer. `hello` replies `404`, `status_json` reports
+  `disconnected`, and print calls return a JSON-RPC error listing the
+  configured routes.
+- The HTTP server registers a single root context and resolves the endpoint from
+  the path, instead of one fixed context per endpoint, since the route key can
+  precede or follow `hw_proxy`. Unknown paths return `404`.
+
 ## [1.0.3] - 2026-06-11
 
 ### Added
