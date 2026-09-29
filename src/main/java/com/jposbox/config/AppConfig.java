@@ -134,7 +134,8 @@ public class AppConfig {
                         cut_after_print INTEGER NOT NULL DEFAULT 1,
                         open_drawer_after_print INTEGER NOT NULL DEFAULT 0,
                         char_width INTEGER NOT NULL DEFAULT 42,
-                        printer_width_px INTEGER NOT NULL DEFAULT 576
+                        printer_width_px INTEGER NOT NULL DEFAULT 576,
+                        post_cut_delay_ms INTEGER NOT NULL DEFAULT 250
                     )
                     """);
         }
@@ -157,6 +158,12 @@ public class AppConfig {
                 st.execute("ALTER TABLE printers ADD COLUMN slug TEXT");
             }
             LOG.info("Added 'slug' column to printers table (per-printer route key)");
+        }
+        if (!columns.contains("post_cut_delay_ms")) {
+            try (Statement st = conn.createStatement()) {
+                st.execute("ALTER TABLE printers ADD COLUMN post_cut_delay_ms INTEGER NOT NULL DEFAULT 250");
+            }
+            LOG.info("Added 'post_cut_delay_ms' column to printers table");
         }
     }
 
@@ -198,6 +205,7 @@ public class AppConfig {
                 p.openDrawerAfterPrint = rs.getInt("open_drawer_after_print") != 0;
                 p.charWidth = rs.getInt("char_width");
                 p.printerWidthPx = rs.getInt("printer_width_px");
+                p.postCutDelayMs = rs.getInt("post_cut_delay_ms");
                 cfg.printers.add(p);
             }
         }
@@ -232,8 +240,9 @@ public class AppConfig {
         }
         try (PreparedStatement ps = conn.prepareStatement(
                 "INSERT INTO printers(name, slug, type, is_default, host, port, system_printer_name, "
-                        + "cut_after_print, open_drawer_after_print, char_width, printer_width_px) "
-                        + "VALUES (?,?,?,?,?,?,?,?,?,?,?)")) {
+                        + "cut_after_print, open_drawer_after_print, char_width, printer_width_px, "
+                        + "post_cut_delay_ms) "
+                        + "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")) {
             for (PrinterConfig p : printers) {
                 ps.setString(1, p.name);
                 ps.setString(2, p.slug);
@@ -246,6 +255,7 @@ public class AppConfig {
                 ps.setInt(9, p.openDrawerAfterPrint ? 1 : 0);
                 ps.setInt(10, p.charWidth);
                 ps.setInt(11, p.printerWidthPx);
+                ps.setInt(12, p.postCutDelayMs);
                 ps.addBatch();
             }
             ps.executeBatch();

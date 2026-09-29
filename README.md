@@ -258,6 +258,24 @@ fresh certificate covering every current network address is created on
 startup. Then repeat the "open `/hw_proxy/hello` once and accept the warning"
 step, since a new certificate needs accepting again.
 
+### Printouts come out garbled after a few in a row, but the first one or two look fine
+
+Almost always a timing issue with the printer's cutter, not an encoding bug —
+a real encoding problem would garble the very first printout too, not only
+after several. Closing the connection right after sending the cut command
+gives a budget thermal printer's cutter motor and receive buffer zero time to
+finish before the *next* job's connection can arrive; if prints come in fast
+(a busy POS firing off a kitchen ticket and a receipt back to back, or several
+orders in a row), the printer's ESC/POS parser can desync mid-cut and start
+interpreting the next job's bytes as garbage.
+
+jPosBox already waits after cutting/opening the drawer before closing the
+connection (**Delay after cut (ms)** in the printer's settings, default
+`250`), and serializes jobs sent to the same printer so two can never reach it
+at the same time. If it's still happening on your printer, raise that delay
+— `500`–`800` is reasonable for a slower cutter — in the Printers tab, edit
+the printer, and **Test Print** a few times in quick succession to confirm.
+
 ## Packaging
 
 ```bash

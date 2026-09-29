@@ -21,6 +21,7 @@ public class PrinterDialog extends JDialog {
     private final JCheckBox cutCheck = new JCheckBox("Cut paper after print", true);
     private final JCheckBox drawerCheck = new JCheckBox("Open cash drawer after print", false);
     private final JSpinner widthSpinner = new JSpinner(new SpinnerNumberModel(42, 20, 80, 1));
+    private final JSpinner postCutDelaySpinner = new JSpinner(new SpinnerNumberModel(250, 0, 5000, 50));
 
     private final CardLayout cardLayout = new CardLayout();
     private final JPanel cards = new JPanel(cardLayout);
@@ -88,6 +89,10 @@ public class PrinterDialog extends JDialog {
         form.add(drawerCheck, gbc(c, 0));
         c.gridy++;
         addRow(form, c, "Chars per line:", widthSpinner);
+        postCutDelaySpinner.setToolTipText("<html>Time to let the cutter/drawer finish before closing the"
+                + " connection.<br>Raise this if printouts come out garbled after a few in a row"
+                + " (the printer's<br>buffer gets a new job before it's done with the previous cut).</html>");
+        addRow(form, c, "Delay after cut (ms):", postCutDelaySpinner);
 
         javax.swing.event.DocumentListener refreshPreview = new javax.swing.event.DocumentListener() {
             @Override
@@ -169,6 +174,7 @@ public class PrinterDialog extends JDialog {
         cutCheck.setSelected(p.cutAfterPrint);
         drawerCheck.setSelected(p.openDrawerAfterPrint);
         widthSpinner.setValue(p.charWidth);
+        postCutDelaySpinner.setValue(p.postCutDelayMs);
         cardLayout.show(cards, p.type.name());
     }
 
@@ -189,6 +195,7 @@ public class PrinterDialog extends JDialog {
         p.cutAfterPrint = cutCheck.isSelected();
         p.openDrawerAfterPrint = drawerCheck.isSelected();
         p.charWidth = (Integer) widthSpinner.getValue();
+        p.postCutDelayMs = (Integer) postCutDelaySpinner.getValue();
         return p;
     }
 }

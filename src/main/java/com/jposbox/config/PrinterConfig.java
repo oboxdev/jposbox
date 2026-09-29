@@ -35,6 +35,18 @@ public class PrinterConfig {
     public int charWidth = 42; // 80mm paper, font A default
     public int printerWidthPx = 576; // raster image width: 576 = 80mm, 384 = 58mm
 
+    /**
+     * Milliseconds to wait after sending cut/drawer commands before closing the
+     * connection. The cutter blade and drawer solenoid are mechanical, real-time
+     * operations; closing the connection right after flush() gives the printer
+     * zero time to finish them. On budget thermal printers with a small receive
+     * buffer, a fast burst of back-to-back print jobs (a busy POS sending several
+     * receipts in a row) can then arrive while the previous job's cut/buffer is
+     * still draining, desyncing the printer's ESC/POS parser — the next job's
+     * text comes out garbled. 250ms is enough headroom for most printers.
+     */
+    public int postCutDelayMs = 250;
+
     public PrinterConfig() {
     }
 

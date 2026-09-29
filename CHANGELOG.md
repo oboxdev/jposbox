@@ -3,6 +3,25 @@
 All notable changes to jPosBox are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
+## [1.2.1] - 2026-09-29
+
+### Fixed
+- Printouts could come out garbled after a few consecutive jobs on the same
+  printer. Two contributing causes, both fixed:
+  - The connection was closed immediately after sending the cut/drawer
+    command, giving a budget printer's cutter motor and receive buffer no
+    time to finish before the next job's connection could arrive, desyncing
+    its ESC/POS parser. A configurable **Delay after cut (ms)** (default
+    `250`, per printer) now runs before the connection closes.
+  - Print/cashbox requests to the same physical printer (matched by
+    host:port or OS printer name, not by config row) are now serialized.
+    The HTTP server's unbounded thread pool could otherwise open concurrent
+    connections to one printer from two overlapping requests (e.g. a kitchen
+    ticket and a receipt fired back to back) — most budget ESC/POS printers
+    only expect one active connection and can interleave or drop bytes from
+    two at once, indistinguishable from a garbled encoding bug at the
+    printout.
+
 ## [1.2.0] - 2026-09-29
 
 ### Added
