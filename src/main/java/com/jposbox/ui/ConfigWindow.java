@@ -204,13 +204,32 @@ public class ConfigWindow extends JFrame {
      * printer, and copies it to the clipboard. Odoo appends "/hw_proxy/<endpoint>"
      * to it, so the trailing route segment is what tells jPosBox which printer to
      * use.
+     *
+     * <p>Prefers {@code https://} (when HTTPS is enabled, the default) over a
+     * bare {@code host:port}: Odoo treats a schemeless Proxy IP as plain
+     * {@code http://}, and browsers block that as "mixed content" the moment
+     * the POS itself is served over HTTPS (Odoo.sh, or any TLS-terminated
+     * production Odoo) — everywhere except {@code localhost}, which is exactly
+     * why this looks fine in local testing and breaks for real users.
      */
     private void showOdooUrl(PrinterConfig printer) {
         String slug = printer.routeSlug();
-        String proxyIp = localAddress() + ":" + config.httpPort + (slug.isEmpty() ? "" : "/" + slug);
+        String path = slug.isEmpty() ? "" : "/" + slug;
+        String proxyIp = config.httpsEnabled
+                ? "https://" + localAddress() + ":" + config.httpsPort + path
+                : localAddress() + ":" + config.httpPort + path;
         Toolkit.getDefaultToolkit().getSystemClipboard()
                 .setContents(new java.awt.datatransfer.StringSelection(proxyIp), null);
 
+        String httpsReminder = config.httpsEnabled
+                ? "<br><br><b>First time only:</b> open <tt>https://" + localAddress() + ":" + config.httpsPort
+                        + "/hw_proxy/hello</tt> once in the browser the POS runs in, and accept the self-signed"
+                        + " certificate warning &mdash; otherwise the POS will fail to reach jPosBox at all."
+                : "<br><br><b>Warning:</b> HTTPS is disabled, so this is a plain <tt>http://</tt> address."
+                        + " Browsers block that as \"mixed content\" from any POS page served over HTTPS"
+                        + " (Odoo.sh, or TLS-terminated production Odoo) &mdash; it will only work if the POS"
+                        + " itself is also served over plain HTTP, or from <tt>localhost</tt>. Enable HTTPS in"
+                        + " the Server tab to fix this.";
         String message = "<html>Paste this into Odoo &rarr; Point of Sale &rarr; Printers &rarr;"
                 + " <b>Proxy IP</b>:<br><br><b>" + proxyIp + "</b><br><br>"
                 + "(copied to the clipboard)<br><br>Odoo will then call"
@@ -218,6 +237,7 @@ public class ConfigWindow extends JFrame {
                 + (slug.isEmpty()
                         ? ", which prints on the default printer."
                         : ", which prints on <b>" + printer.name + "</b>.")
+                + httpsReminder
                 + "</html>";
         JOptionPane.showMessageDialog(this, message, "Odoo proxy IP for " + printer.name,
                 JOptionPane.INFORMATION_MESSAGE);

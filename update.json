@@ -1,5 +1,5 @@
 {
-  "version": "1.1.0",
+  "version": "1.2.0",
   "url": "https://github.com/oboxdev/jposbox/releases/latest",
-  "notes": "Route multiple printers from one jPosBox: give each printer an Odoo route and point each pos.printer's Proxy IP at <host>:<port>/<route>."
+  "notes": "Renders the legacy jIotBox XML receipt format natively (native QR/barcode, tables, text sizing) via print_xml_receipt and default_printer_action. Fixes the HTTPS certificate not covering this machine's real LAN address (was silently breaking HTTPS for anyone but the address picked at cert-generation time)."
 }

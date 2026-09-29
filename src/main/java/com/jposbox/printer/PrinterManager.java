@@ -89,13 +89,11 @@ public class PrinterManager {
         if (source == null) {
             throw new IOException("Could not decode receipt image");
         }
-        BufferedImage scaled = scaleToWidth(source, printer.printerWidthPx);
 
         try (OutputStream out = openConnection(printer)) {
             EscPos escpos = new EscPos(out);
             escpos.initializePrinter();
-            EscPosImage escPosImage = new EscPosImage(new CoffeeImageImpl(scaled), new BitonalThreshold());
-            escpos.write(new RasterBitImageWrapper(), escPosImage);
+            writeRasterImage(escpos, source, printer.printerWidthPx);
             if (printer.cutAfterPrint) {
                 escpos.feed(3).cut(CutMode.PART);
             }
@@ -106,7 +104,19 @@ public class PrinterManager {
         }
     }
 
-    private BufferedImage scaleToWidth(BufferedImage source, int targetWidth) {
+    /**
+     * Encodes a bitmap as ESC/POS raster data and writes it into an already-open
+     * job (e.g. an {@code <img>} embedded mid-receipt by {@link JiotBoxXmlRenderer}),
+     * scaling it to the printer's raster width first. Shared with {@link #printImage}
+     * so both paths encode images identically.
+     */
+    public static void writeRasterImage(EscPos escpos, BufferedImage image, int targetWidthPx) throws IOException {
+        BufferedImage scaled = scaleToWidth(image, targetWidthPx);
+        EscPosImage escPosImage = new EscPosImage(new CoffeeImageImpl(scaled), new BitonalThreshold());
+        escpos.write(new RasterBitImageWrapper(), escPosImage);
+    }
+
+    private static BufferedImage scaleToWidth(BufferedImage source, int targetWidth) {
         if (source.getWidth() == targetWidth) {
             return source;
         }

@@ -86,12 +86,15 @@ Requires an active Apple Developer Program membership ($99/year).
 ## Connect from Odoo POS
 
 1. In Odoo: **Point of Sale > Configuration > Settings**, enable
-   "IoT Box" / proxy printing for the POS, and set the **Proxy IP/host** to the
-   machine running jPosBox (e.g. `192.168.1.50:8008`, or
-   `https://192.168.1.50:8443` for HTTPS).
-2. If using HTTPS, open `https://<host>:8443/hw_proxy/hello` once in the
-   browser used by the POS and accept the self-signed certificate warning
-   (the cert is generated on first run, stored in `~/.jposbox/keystore.p12`).
+   "IoT Box" / proxy printing for the POS, and set the **Proxy IP/host** to
+   `https://192.168.1.50:8443` (use the **Odoo URL** button in the Printers
+   tab to get this exact value for a given printer, already copied to the
+   clipboard). Prefer this over a bare `192.168.1.50:8008` — see
+   [Troubleshooting](#troubleshooting) below for why.
+2. Open `https://<host>:8443/hw_proxy/hello` once in the browser used by the
+   POS and accept the self-signed certificate warning (the cert is generated
+   on first run, stored in `~/.jposbox/keystore.p12`, and covers every network
+   address this machine currently has — not just `localhost`).
 3. Print a receipt from the POS — it's converted from Odoo's receipt HTML to
    ESC/POS and sent to the default printer.
 
@@ -141,21 +144,119 @@ Every endpoint below also exists as `/<route>/hw_proxy/<endpoint>` and
 - `GET  /hw_proxy/status_json` — configured printers + reachability (only the
   routed printer when the path names one)
 - `POST /hw_proxy/print_receipt` — `{ "receipt": "<html>..." }`
-- `POST /hw_proxy/print_xml_receipt` — compat stub, prints text content only
+- `POST /hw_proxy/print_xml_receipt` — `{ "receipt": "<xml>..." }`, rendered as
+  native ESC/POS via the legacy jIotBox tag set (text, alignment, bold, text
+  size, tables, native QR/barcode, images, mid-receipt cuts) — see
+  [jIotBox XML receipts](#jiotbox-xml-receipts)
 - `POST /hw_proxy/open_cashbox`
-- `POST /hw_proxy/default_printer_action` — Odoo 17-19: `{"data":{"action":"print_receipt","receipt":"<base64 JPEG/PNG>"}}`,
-  printed as a raster bitmap (scaled to `printerWidthPx`); `action: "open_cashbox"`/`"cashbox"` pulses the drawer.
-  Despite the name, it prints on the routed printer, not only on the default one
+- `POST /hw_proxy/default_printer_action` — Odoo 17-19: `{"data":{"action":"print_receipt","receipt":"<base64 ...>"}}`.
+  Normally the payload is a rasterized image (JPEG/PNG), printed as a bitmap
+  (scaled to `printerWidthPx`); if it doesn't decode as an image, it's sniffed
+  as jIotBox XML and rendered the same way as `print_xml_receipt`.
+  `action: "open_cashbox"`/`"cashbox"` pulses the drawer. Despite the name, it
+  prints on the routed printer, not only on the default one
 - `POST /hw_proxy/scan_item_success` / `scan_item_error_unrecognized` — no-ops
 - `POST /hw_proxy/test_ownership` / `take_control` — no-ops
 
+## jIotBox XML receipts
+
+`print_xml_receipt`, and `default_printer_action` when its base64 payload
+isn't a decodable image, render a flat XML tag set ported from the original
+jIotBox project's Node.js receipt renderer, straight to ESC/POS (native QR
+codes and barcodes, not rasterized). Alignment, bold and text size are
+**global state that persists across tags** until changed again — exactly like
+real printer commands, not scoped/inherited like CSS.
+
+| Tag / attribute | Effect |
+|---|---|
+| `<receipt>` | Root element, no effect on its own |
+| `<div>`, `<line>` | Grouping only (`<line>` also feeds one line) |
+| `<br/>` | Feed one line |
+| `<hr/>` | A dashed line the full width of the printer |
+| `<left/>` / `<right/>`, or `align="left"\|"center"\|"right"` (any tag) | Sets alignment, persists until changed |
+| `font="a"` / `font="b"` (any tag) | Bold off / on, persists until changed |
+| `<textnormal/>` / `<textdoublewidth/>` / `<textdoubleheight/>` | Text size, persists until changed |
+| `<table><tr><td width="0.xx" align="..." font="...">` | One physical line per `<tr>`, columns laid out proportionally by `width` (defaults to an even split); each `<td>` keeps its own alignment and bold |
+| `<qrcode>text</qrcode>` | Native ESC/POS QR code |
+| `<barcode>text</barcode>` | Native ESC/POS CODE128 barcode |
+| `<img src="data:image/png;base64,...">` | Rasterized inline image, scaled to `printerWidthPx`. No `src` (or an undecodable one) is skipped, not an error |
+| `<cut/>` | Cuts the paper immediately, mid-receipt |
+
+```xml
+<receipt>
+  <div align="center" font="b"><textdoublewidth/>MY STORE<textnormal/></div>
+  <hr/>
+  <table><tr><td width="0.6">2x Coffee</td><td width="0.4" align="right">8.00</td></tr></table>
+  <div align="right" font="b">TOTAL 8.00</div>
+  <div align="center"><qrcode>https://example.com/receipt/42</qrcode></div>
+  <cut/>
+</receipt>
+```
+
+This tag set is unrelated to `print_receipt`'s Odoo `pos-receipt` HTML
+renderer (div/table markup with `pos-receipt-*` classes) — the two are
+separate code paths for separate receipt formats.
+
 ## Limitations (v1)
 
-- Receipt rendering covers text, alignment, bold and simple tables. Logos,
-  QR codes and barcodes embedded as `<img>` are **not** rendered yet.
+- `print_receipt`'s Odoo `pos-receipt` HTML rendering covers text, alignment,
+  bold and simple tables. Logos, QR codes and barcodes embedded as `<img>` in
+  that HTML are **not** rendered (the jIotBox XML tag set above does support
+  them, natively).
 - Full Odoo 17/18 IoT "hw_drivers" framework (websocket device manager,
   mDNS, Odoo-signed certs) is **not** implemented — only the classic
   `hw_proxy` HTTP contract, which Odoo POS still uses for direct printing.
+
+## Troubleshooting
+
+### "Blocked mixed content" / "Mixed Content ... has been blocked" — works on localhost, not by IP
+
+The POS page is served over HTTPS and its **Proxy IP** points at a plain
+`http://` address (or a bare `192.168.1.50:8008` with no scheme, which Odoo
+treats as `http://`). Browsers block that as mixed content — **except** for
+`localhost`/`127.0.0.1`, which they always treat as safe regardless of scheme.
+That's exactly why it works from the same machine and breaks for everyone
+else: it was never actually about the printer or the network, only about
+which hostname the browser was willing to trust.
+
+Fix: point the Proxy IP at `https://<host>:8443` instead (jPosBox's HTTPS
+port, enabled by default). Use the **Odoo URL** button in the Printers tab to
+get the right value copied to the clipboard automatically. The very first
+time, also open `https://<host>:8443/hw_proxy/hello` in the browser the POS
+runs in and accept the self-signed certificate warning — skipping this step
+trades the mixed-content error for a silent connection failure instead
+(the browser refuses the untrusted certificate, invisibly to the POS UI).
+
+If Chrome's per-site "accept the warning" flow isn't an option (e.g. a kiosk
+browser with no way to click through an interstitial), two alternatives that
+don't require switching to HTTPS at all:
+- Site settings → click the address bar's site icon → **Site settings** →
+  **Insecure content** → **Allow**, for the POS's own URL.
+- `chrome://flags/#unsafely-treat-insecure-origin-as-secure`, adding the exact
+  origin (e.g. `http://192.168.1.50:8008`) — or the equivalent
+  `--unsafely-treat-insecure-origin-as-secure=http://192.168.1.50:8008`
+  command-line flag for a kiosk launch script.
+
+Both narrow the exception to that one address on that one browser/profile —
+reasonable on a trusted store LAN, but something to repeat on every POS
+terminal, unlike fixing it once via HTTPS above.
+
+### Switched to HTTPS, but it still doesn't work (certificate error, or still silently fails)
+
+Chrome and other modern browsers validate a certificate's **Subject
+Alternative Name (SAN)** only — they ignore the CN entirely. jPosBox's
+self-signed certificate must list the exact address typed in the Proxy IP as
+a SAN entry, or the browser rejects it even after "accepting" it once.
+
+This is generated automatically and should just work, but on first HTTPS
+setup — or after this machine's IP address changes (a new DHCP lease, moving
+networks, etc.) — the certificate can need regenerating. jPosBox detects a
+stale certificate (current network addresses no longer covered by it) and
+regenerates automatically on the next restart; to force it immediately,
+quit jPosBox and delete `~/.jposbox/keystore.p12`, then start it again — a
+fresh certificate covering every current network address is created on
+startup. Then repeat the "open `/hw_proxy/hello` once and accept the warning"
+step, since a new certificate needs accepting again.
 
 ## Packaging
 
@@ -180,5 +281,6 @@ runs on — build on each target OS separately:
 - Config: `~/.jposbox/config.db` (SQLite; legacy `config.json` is
   auto-migrated and renamed to `config.json.bak`). The `printers.slug` column is
   added automatically on first run of 1.1.0+
-- TLS keystore: `~/.jposbox/keystore.p12`
+- TLS keystore: `~/.jposbox/keystore.p12` (self-signed, auto-regenerated
+  whenever this machine's network addresses no longer match it)
 - Logs: `~/.jposbox/logs/app.log`

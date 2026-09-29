@@ -3,6 +3,43 @@
 All notable changes to jPosBox are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
+## [1.2.0] - 2026-09-29
+
+### Added
+- Native ESC/POS rendering of the legacy jIotBox XML receipt tag set (text,
+  alignment, bold, text size, tables, native QR codes and CODE128 barcodes,
+  inline images, mid-receipt cuts), ported from that project's Node.js
+  `parseHtmltoPrint()`. Alignment/bold/text-size are global state that
+  persists across tags, matching real ESC/POS command behavior.
+  - `print_xml_receipt` now renders this tag set instead of stripping to
+    plain text.
+  - `default_printer_action` sniffs its base64 payload: a valid image still
+    prints as a raster bitmap as before; text that doesn't decode as an image
+    is rendered as jIotBox XML instead of failing.
+- `PrinterManager.writeRasterImage()`: the raster-image encoding used by
+  `printImage()` is now reusable mid-job, so `<img>` tags can be embedded
+  inline within an otherwise text-based receipt.
+
+### Fixed
+- The **Odoo URL** button (Printers tab) suggested a bare `host:port` Proxy
+  IP, which Odoo treats as plain `http://`. Browsers block that as "mixed
+  content" the moment the POS itself is served over HTTPS (Odoo.sh, or any
+  TLS-terminated production Odoo) — everywhere except `localhost`, which is
+  why it only ever showed up for real (non-local) users. It now suggests
+  `https://<host>:<httpsPort>` when HTTPS is enabled (the default), with a
+  reminder to accept the self-signed certificate once.
+- The self-signed HTTPS certificate's Subject Alternative Name only ever
+  covered `InetAddress.getLocalHost()`, which on a machine with several
+  network interfaces (Wi-Fi + Ethernet + a VPN adapter, common on laptops)
+  frequently resolves to the wrong one, or to a loopback address — with no
+  relation to the LAN IP other devices actually use to reach this machine.
+  Since Chrome and other modern browsers validate the SAN only (ignoring the
+  CN), this made HTTPS silently unusable from anything but the address that
+  happened to be picked, `localhost` included. The certificate now lists
+  every non-loopback IPv4 address across every network interface, and is
+  regenerated automatically if this machine's addresses change after it was
+  first issued (e.g. a new DHCP lease) instead of staying stale forever.
+
 ## [1.1.0] - 2026-09-24
 
 ### Added
