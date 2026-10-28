@@ -3,6 +3,28 @@
 All notable changes to jPosBox are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
+## [Unreleased]
+
+### Added
+- Trusted HTTPS: jPosBox now creates a local CA (`jPosBox Local CA`) and signs
+  its HTTPS server certificate with it, instead of a lone self-signed
+  certificate. Server tab gets **Trust HTTPS certificate on this computer...**
+  (installs the CA for the current user on macOS, Windows and Linux/NSS) and
+  **Certificate for other devices...** (shows the `http://<host>:8008/ca.crt`
+  download plus the CA's SHA-256 fingerprint). No more per-browser "accept the
+  warning" step.
+- `GET /ca.crt` serves the public CA certificate.
+
+### Changed
+- When the machine's IP changes only the server certificate is reissued; the
+  CA, and the trust devices already granted it, stay valid.
+- The CA is restricted by critical Name Constraints to `localhost`, `*.local`
+  and private/loopback/CGNAT IPv4 ranges, so a leaked CA key cannot be used to
+  impersonate other sites. Public IPs and non-`.local` hostnames are no longer
+  put in the certificate's SAN.
+- Existing self-signed `keystore.p12` files are replaced automatically on
+  first start; each device then needs to trust the CA once.
+
 ## [1.2.1] - 2026-09-29
 
 ### Fixed

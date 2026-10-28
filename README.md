@@ -91,10 +91,19 @@ Requires an active Apple Developer Program membership ($99/year).
    tab to get this exact value for a given printer, already copied to the
    clipboard). Prefer this over a bare `192.168.1.50:8008` — see
    [Troubleshooting](#troubleshooting) below for why.
-2. Open `https://<host>:8443/hw_proxy/hello` once in the browser used by the
-   POS and accept the self-signed certificate warning (the cert is generated
-   on first run, stored in `~/.jposbox/keystore.p12`, and covers every network
-   address this machine currently has — not just `localhost`).
+2. Trust the HTTPS certificate once per device that opens the POS:
+   - **This computer:** Server tab → **Trust HTTPS certificate on this
+     computer...** (installs the jPosBox CA for your user; the OS asks you to
+     confirm). Then fully restart the browser.
+   - **Tablets / other PCs:** Server tab → **Certificate for other devices...**
+     shows `http://<host>:8008/ca.crt` (copied to the clipboard) and the CA's
+     SHA-256 fingerprint. Open that address on the device, install the
+     certificate and compare the fingerprint.
+   The CA is generated on first run in `~/.jposbox/` and signs the HTTPS
+   server certificate, which covers every private network address this
+   machine currently has — not just `localhost`. If the IP changes, only the
+   server certificate is reissued; devices that already trust the CA keep
+   working with no further steps.
 3. Print a receipt from the POS — it's converted from Odoo's receipt HTML to
    ESC/POS and sent to the default printer.
 
@@ -222,10 +231,11 @@ which hostname the browser was willing to trust.
 Fix: point the Proxy IP at `https://<host>:8443` instead (jPosBox's HTTPS
 port, enabled by default). Use the **Odoo URL** button in the Printers tab to
 get the right value copied to the clipboard automatically. The very first
-time, also open `https://<host>:8443/hw_proxy/hello` in the browser the POS
-runs in and accept the self-signed certificate warning — skipping this step
-trades the mixed-content error for a silent connection failure instead
-(the browser refuses the untrusted certificate, invisibly to the POS UI).
+time, trust the jPosBox certificate on that device (Server tab → **Trust HTTPS
+certificate on this computer...** or **Certificate for other devices...**) —
+skipping this step trades the mixed-content error for a silent connection
+failure instead (the browser refuses the untrusted certificate, invisibly to
+the POS UI).
 
 If Chrome's per-site "accept the warning" flow isn't an option (e.g. a kiosk
 browser with no way to click through an interstitial), two alternatives that
@@ -245,18 +255,31 @@ terminal, unlike fixing it once via HTTPS above.
 
 Chrome and other modern browsers validate a certificate's **Subject
 Alternative Name (SAN)** only — they ignore the CN entirely. jPosBox's
-self-signed certificate must list the exact address typed in the Proxy IP as
-a SAN entry, or the browser rejects it even after "accepting" it once.
+server certificate lists every private IPv4 address of this machine, and is
+signed by a local CA (`jPosBox Local CA`) that each device must trust once.
 
-This is generated automatically and should just work, but on first HTTPS
-setup — or after this machine's IP address changes (a new DHCP lease, moving
-networks, etc.) — the certificate can need regenerating. jPosBox detects a
-stale certificate (current network addresses no longer covered by it) and
-regenerates automatically on the next restart; to force it immediately,
-quit jPosBox and delete `~/.jposbox/keystore.p12`, then start it again — a
-fresh certificate covering every current network address is created on
-startup. Then repeat the "open `/hw_proxy/hello` once and accept the warning"
-step, since a new certificate needs accepting again.
+- **Browser still warns / POS can't connect:** that device doesn't trust the
+  CA yet. Use **Trust HTTPS certificate on this computer...** (same machine)
+  or **Certificate for other devices...** (tablets, other PCs) in the Server
+  tab, then fully restart the browser. Firefox keeps its own store on
+  macOS/Windows: set `security.enterprise_roots.enabled` to `true` in
+  `about:config`, or import `ca.crt` under Settings → Certificates.
+- **IP changed:** nothing to do. jPosBox notices on the next restart and
+  reissues only the server certificate; the CA, and the trust already granted
+  to it, stay the same.
+- **Linux:** the installer button needs `certutil` (Debian/Ubuntu:
+  `sudo apt install libnss3-tools`) and covers Chrome/Chromium and existing
+  Firefox profiles. Otherwise import `~/.jposbox/ca.crt` manually.
+- **Public IP / non-`.local` hostname:** the CA is restricted (critical X.509
+  Name Constraints) to `localhost`, `*.local` and private/loopback/CGNAT IPv4
+  ranges, so it never signs for anything else. Reach jPosBox by a private IP
+  or `*.local` name.
+- **Start over:** quit jPosBox and delete `~/.jposbox/keystore.p12` to reissue
+  the server certificate, or also `ca.p12` and `ca.crt` to create a brand new
+  CA (every device must then trust the new one).
+- **Remove the trust:** macOS — Keychain Access → login → delete
+  `jPosBox Local CA`; Windows — `certutil -user -delstore Root "jPosBox Local CA"`;
+  Linux — `certutil -d sql:$HOME/.pki/nssdb -D -n "jPosBox Local CA"`.
 
 ### Printouts come out garbled after a few in a row, but the first one or two look fine
 
@@ -299,6 +322,8 @@ runs on — build on each target OS separately:
 - Config: `~/.jposbox/config.db` (SQLite; legacy `config.json` is
   auto-migrated and renamed to `config.json.bak`). The `printers.slug` column is
   added automatically on first run of 1.1.0+
-- TLS keystore: `~/.jposbox/keystore.p12` (self-signed, auto-regenerated
-  whenever this machine's network addresses no longer match it)
+- TLS: `~/.jposbox/ca.p12` (local CA private key — keep private, permissions
+  `600`), `~/.jposbox/ca.crt` (CA public certificate, also served at
+  `/ca.crt`), `~/.jposbox/keystore.p12` (server certificate signed by the CA,
+  auto-reissued whenever this machine's network addresses no longer match it)
 - Logs: `~/.jposbox/logs/app.log`
