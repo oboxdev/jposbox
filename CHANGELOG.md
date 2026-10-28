@@ -3,7 +3,7 @@
 All notable changes to jPosBox are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
-## [Unreleased]
+## [1.3.0] - 2026-10-27
 
 ### Added
 - Trusted HTTPS: jPosBox now creates a local CA (`jPosBox Local CA`) and signs
