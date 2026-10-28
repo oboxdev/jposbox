@@ -98,6 +98,74 @@ class SelfSignedCertTest {
         assertFalse(containsIp(sans, "10.99.99.99"), "stale address should be gone after regeneration");
     }
 
+    @Test
+    void serverCertChainsToCaAndPassesPkixValidationIncludingNameConstraints(@TempDir Path dir) throws Exception {
+        useTempHome(dir);
+        KeyStore ks = SelfSignedCert.loadOrCreate();
+        java.security.cert.Certificate[] chain = ks.getCertificateChain(alias());
+        X509Certificate leaf = (X509Certificate) chain[0];
+        X509Certificate ca = (X509Certificate) chain[1];
+
+        assertEquals(-1, leaf.getBasicConstraints(), "server cert must not be a CA");
+        assertTrue(ca.getBasicConstraints() >= 0, "issuer must be a CA");
+        assertTrue(leaf.getExtendedKeyUsage().contains("1.3.6.1.5.5.7.3.1"), "needs serverAuth EKU");
+
+        var params = new java.security.cert.PKIXParameters(java.util.Set.of(new java.security.cert.TrustAnchor(ca, null)));
+        params.setRevocationEnabled(false);
+        var path = java.security.cert.CertificateFactory.getInstance("X.509").generateCertPath(List.of(leaf));
+        // throws CertPathValidatorException if a SAN violates the CA's name constraints
+        java.security.cert.CertPathValidator.getInstance("PKIX").validate(path, params);
+    }
+
+    @Test
+    void caIsRestrictedByCriticalNameConstraints(@TempDir Path dir) throws Exception {
+        useTempHome(dir);
+        KeyStore ks = SelfSignedCert.loadOrCreate();
+        X509Certificate ca = (X509Certificate) ks.getCertificateChain(alias())[1];
+
+        assertTrue(ca.getCriticalExtensionOIDs().contains("2.5.29.30"), "name constraints must be critical");
+    }
+
+    @Test
+    void caSurvivesServerCertRegenerationSoTrustIsKept(@TempDir Path dir) throws Exception {
+        useTempHome(dir);
+        if (SelfSignedCert.currentIPv4Addresses().isEmpty()) {
+            return;
+        }
+        KeyStore first = SelfSignedCert.loadOrCreate();
+        X509Certificate caBefore = (X509Certificate) first.getCertificateChain(alias())[1];
+
+        writeCertCoveringOnly(dir, "10.99.99.99"); // simulate an IP change: server cert goes stale
+        KeyStore second = SelfSignedCert.loadOrCreate();
+        X509Certificate caAfter = (X509Certificate) second.getCertificateChain(alias())[1];
+
+        assertEquals(caBefore, caAfter, "the CA must not change when only the server cert is regenerated");
+        ((X509Certificate) second.getCertificate(alias())).verify(caAfter.getPublicKey());
+    }
+
+    @Test
+    void legacySelfSignedKeystoreIsReplacedByCaSignedCert(@TempDir Path dir) throws Exception {
+        useTempHome(dir);
+        writeCertCoveringOnly(dir, "127.0.0.1"); // pre-CA keystore: self-signed, covers nothing useful
+
+        KeyStore ks = SelfSignedCert.loadOrCreate();
+        assertEquals(2, ks.getCertificateChain(alias()).length, "expected leaf + CA chain after migration");
+    }
+
+    @Test
+    void caCertFileIsWrittenAsPemMatchingTheCa(@TempDir Path dir) throws Exception {
+        useTempHome(dir);
+        Path pem = SelfSignedCert.ensureCaCertFile();
+
+        try (var in = java.nio.file.Files.newInputStream(pem)) {
+            X509Certificate parsed = (X509Certificate) java.security.cert.CertificateFactory
+                    .getInstance("X.509").generateCertificate(in);
+            KeyStore ks = SelfSignedCert.loadOrCreate();
+            assertEquals(ks.getCertificateChain(alias())[1], parsed);
+        }
+        assertTrue(SelfSignedCert.caFingerprintSha256().matches("([0-9A-F]{2}:){31}[0-9A-F]{2}"));
+    }
+
     // --- helpers -----------------------------------------------------------
 
     private String alias() throws Exception {

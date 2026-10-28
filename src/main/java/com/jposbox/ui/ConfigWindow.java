@@ -7,6 +7,8 @@ import com.jposbox.config.PrinterConfig;
 import com.jposbox.printer.PrinterManager;
 import com.jposbox.server.ApiServer;
 import com.jposbox.startup.AutoStart;
+import com.jposbox.tls.CaTrustInstaller;
+import com.jposbox.tls.SelfSignedCert;
 import com.jposbox.update.UpdateChecker;
 import com.jposbox.update.UpdateInfo;
 
@@ -222,9 +224,10 @@ public class ConfigWindow extends JFrame {
                 .setContents(new java.awt.datatransfer.StringSelection(proxyIp), null);
 
         String httpsReminder = config.httpsEnabled
-                ? "<br><br><b>First time only:</b> open <tt>https://" + localAddress() + ":" + config.httpsPort
-                        + "/hw_proxy/hello</tt> once in the browser the POS runs in, and accept the self-signed"
-                        + " certificate warning &mdash; otherwise the POS will fail to reach jPosBox at all."
+                ? "<br><br><b>First time only:</b> on each device that opens the POS, trust the jPosBox"
+                        + " certificate (Server tab &rarr; <i>Trust HTTPS certificate on this computer</i>, or"
+                        + " <i>Certificate for other devices</i>) &mdash; otherwise the browser silently refuses to"
+                        + " reach jPosBox and the POS will fail to connect."
                 : "<br><br><b>Warning:</b> HTTPS is disabled, so this is a plain <tt>http://</tt> address."
                         + " Browsers block that as \"mixed content\" from any POS page served over HTTPS"
                         + " (Odoo.sh, or TLS-terminated production Odoo) &mdash; it will only work if the POS"
@@ -313,9 +316,82 @@ public class ConfigWindow extends JFrame {
         c.gridwidth = 2;
         panel.add(save, c);
 
+        JButton trustHere = new JButton("Trust HTTPS certificate on this computer...");
+        trustHere.addActionListener(e -> installCertificateHere(trustHere));
+        JButton trustOthers = new JButton("Certificate for other devices...");
+        trustOthers.addActionListener(e -> showCertificateForOtherDevices());
+
+        c.gridy++;
+        panel.add(trustHere, c);
+        c.gridy++;
+        panel.add(trustOthers, c);
+
         JPanel wrapper = new JPanel(new BorderLayout());
         wrapper.add(panel, BorderLayout.NORTH);
         return wrapper;
+    }
+
+    /** Installs the jPosBox CA as a trusted root for this user (the OS asks for its own confirmation). */
+    private void installCertificateHere(JButton button) {
+        int choice = JOptionPane.showConfirmDialog(this,
+                "<html>This installs the <b>jPosBox Local CA</b> as a trusted certificate authority for your"
+                        + " user account, so browsers on this computer stop warning about jPosBox's HTTPS.<br><br>"
+                        + "The CA can only vouch for <tt>localhost</tt>, <tt>*.local</tt> and private network"
+                        + " addresses. Your operating system will ask you to confirm.<br><br>Continue?</html>",
+                "Trust jPosBox certificate", JOptionPane.OK_CANCEL_OPTION, JOptionPane.QUESTION_MESSAGE);
+        if (choice != JOptionPane.OK_OPTION) {
+            return;
+        }
+        button.setEnabled(false);
+        new SwingWorker<CaTrustInstaller.Result, Void>() {
+            @Override
+            protected CaTrustInstaller.Result doInBackground() {
+                return CaTrustInstaller.install();
+            }
+
+            @Override
+            protected void done() {
+                button.setEnabled(true);
+                try {
+                    CaTrustInstaller.Result r = get();
+                    JOptionPane.showMessageDialog(ConfigWindow.this, r.message(),
+                            r.ok() ? "Certificate trusted" : "Could not install certificate",
+                            r.ok() ? JOptionPane.INFORMATION_MESSAGE : JOptionPane.ERROR_MESSAGE);
+                } catch (Exception ex) {
+                    JOptionPane.showMessageDialog(ConfigWindow.this, "Install failed: " + ex.getMessage(),
+                            "Error", JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        }.execute();
+    }
+
+    /** Shows where tablets/other PCs can download the CA, plus its fingerprint to verify the download. */
+    private void showCertificateForOtherDevices() {
+        try {
+            String fingerprint = SelfSignedCert.caFingerprintSha256();
+            List<String> ips = SelfSignedCert.currentIPv4Addresses();
+            String host = ips.isEmpty() ? "<this-machine-ip>" : ips.get(0);
+            String url = "http://" + host + ":" + config.httpPort + "/ca.crt";
+            Toolkit.getDefaultToolkit().getSystemClipboard()
+                    .setContents(new java.awt.datatransfer.StringSelection(url), null);
+
+            String message = "<html>Every other device that opens the POS (tablets, other PCs) must trust the"
+                    + " jPosBox CA once. On that device, open this address and install the downloaded certificate:"
+                    + "<br><br><b>" + url + "</b> (copied to the clipboard)<br><br>"
+                    + "Check that the SHA-256 fingerprint of what you installed matches:<br><tt>" + fingerprint
+                    + "</tt><br><br>"
+                    + "<b>Android:</b> Settings &rarr; Security &rarr; Install a certificate &rarr; CA certificate<br>"
+                    + "<b>iOS:</b> install the profile, then Settings &rarr; General &rarr; About &rarr; Certificate"
+                    + " Trust Settings &rarr; enable it<br>"
+                    + "<b>Windows/macOS:</b> double-click the file and add it to the trusted root store<br>"
+                    + "The file is also at <tt>" + SelfSignedCert.caCertPath() + "</tt>."
+                    + "</html>";
+            JOptionPane.showMessageDialog(this, message, "jPosBox certificate for other devices",
+                    JOptionPane.INFORMATION_MESSAGE);
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this, "Could not prepare the certificate: " + e.getMessage(),
+                    "Error", JOptionPane.ERROR_MESSAGE);
+        }
     }
 
     private JPanel buildAboutPanel() {

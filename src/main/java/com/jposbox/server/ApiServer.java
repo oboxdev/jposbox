@@ -2,6 +2,7 @@ package com.jposbox.server;
 
 import com.jposbox.config.AppConfig;
 import com.jposbox.printer.PrinterManager;
+import com.jposbox.server.handlers.CaCertHandler;
 import com.jposbox.server.handlers.DefaultPrinterActionHandler;
 import com.jposbox.server.handlers.HandshakeHandler;
 import com.jposbox.server.handlers.HelloHandler;
@@ -119,6 +120,8 @@ public class ApiServer {
         endpoints.put("test_ownership", new NoOpHandler(true));
         endpoints.put("take_control", new NoOpHandler(Map.of("status", "OWNER")));
 
+        // More specific than "/", so HttpServer picks it first; kept out of the printer-routing path.
+        server.createContext("/ca.crt", new CaCertHandler());
         server.createContext("/", new RouteDispatcher(endpoints)).getFilters().add(new CorsFilter());
     }
 }
