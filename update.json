@@ -1,5 +1,5 @@
 {
-  "version": "1.2.1",
+  "version": "1.3.0",
   "url": "https://github.com/oboxdev/jposbox/releases/latest",
-  "notes": "Fixes printouts coming out garbled after a few consecutive jobs: adds a configurable settle delay after cut/drawer commands, and serializes jobs to the same physical printer so concurrent requests can't open overlapping connections to it."
+  "notes": "HTTPS de confianza: jPosBox crea una CA local que firma el certificado del servidor. Nuevos botones en la pestaña Server para confiar en el certificado en este equipo y para descargarlo (/ca.crt) en otros dispositivos. Si cambia la IP solo se reemite el certificado del servidor; la confianza ya concedida se mantiene."
 }
